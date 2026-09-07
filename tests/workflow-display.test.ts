@@ -44,6 +44,13 @@ test("createWorkflowSnapshot does not pre-render declared phases", () => {
   assert.deepEqual(value.phases, []);
 });
 
+test("renderWorkflowLines shows elapsed time and failure state", () => {
+  const lines = renderWorkflowLines(snapshot({ elapsedMs: 12_345, error: "delivery failed" }));
+  assert.match(lines[0], /12\.3s/);
+  assert.match(lines[0], /failed/);
+  assert.ok(lines.some((line) => line.includes("error: delivery failed")));
+});
+
 test("renderWorkflowLines hides empty phase rows", () => {
   const lines = renderWorkflowLines(
     snapshot({

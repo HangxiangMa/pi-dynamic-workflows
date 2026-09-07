@@ -25,8 +25,16 @@ export interface WorkflowRunOptions extends WorkflowAgentOptions {
   signal?: AbortSignal;
   onLog?: (message: string) => void;
   onPhase?: (title: string) => void;
+  agentRetries?: number;
   onAgentStart?: (event: { label: string; phase?: string; prompt: string }) => void;
-  onAgentEnd?: (event: { label: string; phase?: string; result: unknown }) => void;
+  onAgentRetry?: (event: {
+    label: string;
+    phase?: string;
+    attempt: number;
+    maxAttempts: number;
+    error: string;
+  }) => void;
+  onAgentEnd?: (event: { label: string; phase?: string; result: unknown; attempts: number }) => void;
 }
 
 export interface WorkflowRunResult<T = unknown> {
@@ -45,6 +53,7 @@ export interface AgentOptions<TSchemaDef extends TSchema | undefined = TSchema |
   model?: string;
   isolation?: "worktree";
   agentType?: string;
+  retries?: number;
 }
 
 interface RuntimeState {
@@ -109,24 +118,35 @@ export async function runWorkflow<T = unknown>(
       state.agentCount++;
       const label = requestedLabel || defaultAgentLabel(assignedPhase, state.agentCount);
       options.onAgentStart?.({ label, phase: assignedPhase, prompt: taskPrompt });
-      try {
-        throwIfAborted();
-        const result = await agentRunner.run(taskPrompt, {
-          label,
-          schema: normalizedOptions.schema,
-          signal: options.signal,
-          instructions: buildAgentInstructions(assignedPhase, normalizedOptions),
-        } as any);
-        throwIfAborted();
-        state.spent += estimateTokens(result);
-        options.onAgentEnd?.({ label, phase: assignedPhase, result });
-        return result;
-      } catch (error) {
-        if (options.signal?.aborted) throw error;
-        log(`agent ${label} failed: ${error instanceof Error ? error.message : String(error)}`);
-        options.onAgentEnd?.({ label, phase: assignedPhase, result: null });
-        return null;
+      throwIfAborted();
+      const maxAttempts = 1 + Math.max(0, Math.min(normalizedOptions.retries ?? options.agentRetries ?? 1, 5));
+      let lastError: unknown;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const result = await agentRunner.run(taskPrompt, {
+            label,
+            schema: normalizedOptions.schema,
+            signal: options.signal,
+            instructions: buildAgentInstructions(assignedPhase, normalizedOptions),
+          } as any);
+          throwIfAborted();
+          state.spent += estimateTokens(result);
+          options.onAgentEnd?.({ label, phase: assignedPhase, result, attempts: attempt });
+          return result;
+        } catch (error) {
+          if (options.signal?.aborted) throw error;
+          lastError = error;
+          if (attempt < maxAttempts) {
+            const message = error instanceof Error ? error.message : String(error);
+            options.onAgentRetry?.({ label, phase: assignedPhase, attempt, maxAttempts, error: message });
+            log(`agent ${label} retry ${attempt}/${maxAttempts - 1}: ${message}`);
+          }
+        }
       }
+      const message = lastError instanceof Error ? lastError.message : String(lastError);
+      log(`agent ${label} failed after ${maxAttempts} attempts: ${message}`);
+      options.onAgentEnd?.({ label, phase: assignedPhase, result: null, attempts: maxAttempts });
+      return null;
     });
     pendingAgentRuns.add(run);
     run.then(

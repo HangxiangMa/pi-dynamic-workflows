@@ -121,6 +121,11 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
             });
             update();
           },
+          onAgentRetry(event) {
+            snapshot.retryCount = (snapshot.retryCount ?? 0) + 1;
+            snapshot.logs.push(`retry ${event.label} (${event.attempt}/${event.maxAttempts - 1})`);
+            update();
+          },
           onAgentEnd(event) {
             const agent = [...snapshot.agents]
               .reverse()
@@ -128,11 +133,17 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
             if (agent) {
               agent.status = event.result === null ? "error" : "done";
               agent.resultPreview = preview(event.result);
+              if (event.result === null) agent.error = `failed after ${event.attempts} attempts`;
             }
             update();
           },
         });
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        snapshot.error = message;
+        snapshot.elapsedMs = Date.now() - (snapshot.startedAt ?? Date.now());
+        snapshot = recomputeWorkflowSnapshot(snapshot);
+        display.complete(snapshot);
         if (signal?.aborted || isAbortError(error)) {
           for (const agent of snapshot.agents) {
             if (agent.status === "running") {
@@ -155,14 +166,20 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
 
       snapshot.result = result.result;
       snapshot.durationMs = result.durationMs;
+      snapshot.elapsedMs = result.durationMs;
       snapshot = recomputeWorkflowSnapshot(snapshot);
       display.complete(snapshot);
 
+      const failed = snapshot.errorCount;
+      const retryNote = snapshot.retryCount ? ` Retried ${snapshot.retryCount} agent attempt(s).` : "";
+      const outcome = failed
+        ? `Workflow ${result.meta.name} completed with ${failed} failed agent(s).${retryNote} Main agent should inspect the failed agents and retry or control the workflow.`
+        : `Workflow ${result.meta.name} completed with ${result.agentCount} agent(s).${retryNote}`;
       return {
         content: [
           {
             type: "text",
-            text: `Workflow ${result.meta.name} completed with ${result.agentCount} agent(s).\n\nResult:\n${JSON.stringify(result.result, null, 2)}`,
+            text: `${outcome}\n\nResult:\n${JSON.stringify(result.result, null, 2)}`,
           },
         ],
         details: {
