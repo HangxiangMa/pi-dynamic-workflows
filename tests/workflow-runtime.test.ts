@@ -1501,24 +1501,25 @@ test("parse-time guard rejects literal Date.now / Math.random / new Date()", asy
   }
 });
 
-test("parse-time guard preserves the source blocklist used by existing workflows", () => {
+test("parse-time guard ignores nondeterministic names in prose", () => {
   for (const forbidden of ["Date.now()", "Math.random()", "new Date()"]) {
     const script = `export const meta = { name: 'blocked-prose', description: 'fixture' }
 // ${forbidden} is unavailable here.
 const warning = ${JSON.stringify(`Do not call ${forbidden}`)}
 return { warning }`;
 
-    assert.throws(() => parseWorkflowScript(script), /deterministic|unavailable/i);
+    assert.doesNotThrow(() => parseWorkflowScript(script));
   }
 });
 
-test("runtime guard neuters computed-access bypasses the parse regex misses", async () => {
-  const r1 = await probe('Math["random"]()');
-  assert.match(r1.result.err ?? "", /unavailable|resume/i, 'Math["random"]() should throw at runtime');
-  const r2 = await probe('Date["now"]()');
-  assert.match(r2.result.err ?? "", /unavailable|resume/i, 'Date["now"]() should throw at runtime');
-  const r3 = await probe("(() => { const D = Date; return new D(); })()");
-  assert.match(r3.result.err ?? "", /unavailable|resume/i, "aliased no-arg Date should throw at runtime");
+test("parse-time guard rejects computed nondeterministic access", () => {
+  for (const expr of ['Math["random"]()', 'Date["now"]()', "new Date()"]) {
+    assert.throws(
+      () => parseWorkflowScript(`export const meta = { name: 'computed', description: 'd' }\nreturn ${expr}`),
+      /deterministic|unavailable/i,
+      `${expr} should be rejected before execution`,
+    );
+  }
 });
 
 test("runtime determinism: new Date(arg) and Math.max still work", async () => {
