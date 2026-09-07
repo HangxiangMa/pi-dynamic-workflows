@@ -1525,8 +1525,7 @@ export function parseWorkflowScript(script: string): { meta: WorkflowMeta; body:
     }
     return undefined;
   };
-  const unwrap = (node: AnyNode): AnyNode =>
-    node.type === "ChainExpression" ? (node.expression as AnyNode) : node;
+  const unwrap = (node: AnyNode): AnyNode => (node.type === "ChainExpression" ? (node.expression as AnyNode) : node);
   const isForbidden = (node: AnyNode): boolean => {
     const current = unwrap(node);
     if (current.type === "NewExpression") {
@@ -1538,8 +1537,9 @@ export function parseWorkflowScript(script: string): { meta: WorkflowMeta; body:
         const object = unwrap(callee.object as AnyNode);
         const objectName = staticName(object);
         const propertyName = staticName(callee.property as AnyNode);
-        return (objectName === "Date" && propertyName === "now") ||
-          (objectName === "Math" && propertyName === "random");
+        return (
+          (objectName === "Date" && propertyName === "now") || (objectName === "Math" && propertyName === "random")
+        );
       }
     }
     return false;
