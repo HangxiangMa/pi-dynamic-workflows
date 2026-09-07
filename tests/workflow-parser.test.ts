@@ -5,7 +5,7 @@ import { parseWorkflowScript } from "../src/workflow.js";
 const validScript = `export const meta = {
   name: 'demo_workflow',
   description: 'A useful workflow',
-  whenToUse: 'When testing parser behavior',
+  model: 'provider/default-model',
   phases: [{ title: 'Scan', detail: 'Collect inputs', model: 'default' }]
 }
 
@@ -90,6 +90,83 @@ test("parseWorkflowScript rejects template interpolation", () => {
     () => parseWorkflowScript("export const meta = { name: `demo_$" + "{id}`, description: 'desc' }"),
     /template interpolation not allowed/,
   );
+});
+
+// ─── Negative / error-path tests ───────────────────────────────────────────────
+
+test("parseWorkflowScript rejects empty string", () => {
+  assert.throws(() => parseWorkflowScript(""), /must be the first statement/);
+});
+
+test("parseWorkflowScript rejects whitespace-only string", () => {
+  assert.throws(() => parseWorkflowScript("   "), /must be the first statement/);
+});
+
+test("parseWorkflowScript rejects script without meta export", () => {
+  assert.throws(() => parseWorkflowScript("return 42"), /must be the first statement/);
+});
+
+test("parseWorkflowScript rejects meta without const keyword", () => {
+  assert.throws(
+    () => parseWorkflowScript("export var meta = { name: 'demo', description: 'desc' }"),
+    /must be `export const meta/,
+  );
+});
+
+test("parseWorkflowScript rejects meta with wrong variable name", () => {
+  assert.throws(
+    () => parseWorkflowScript("export const x = { name: 'demo', description: 'desc' }"),
+    /must declare `meta`/,
+  );
+});
+
+test("parseWorkflowScript rejects multiple declarations", () => {
+  assert.throws(
+    () => parseWorkflowScript("export const meta = { name: 'demo', description: 'desc' }, x = 1"),
+    /must declare only/,
+  );
+});
+
+test("parseWorkflowScript rejects meta without init value", () => {
+  assert.throws(() => parseWorkflowScript("export const meta"), /SyntaxError|must have a literal value/);
+});
+
+test("parseWorkflowScript rejects empty name string", () => {
+  assert.throws(() => parseWorkflowScript("export const meta = { name: '', description: 'desc' }"), /non-empty string/);
+});
+
+test("parseWorkflowScript rejects empty description string", () => {
+  assert.throws(() => parseWorkflowScript("export const meta = { name: 'demo', description: '' }"), /non-empty string/);
+});
+
+test("parseWorkflowScript rejects phases that is not an array", () => {
+  assert.throws(
+    () => parseWorkflowScript("export const meta = { name: 'demo', description: 'desc', phases: 'scalar' }"),
+    /must be an array/,
+  );
+});
+
+test("parseWorkflowScript rejects phases without title", () => {
+  assert.throws(
+    () => parseWorkflowScript("export const meta = { name: 'demo', description: 'desc', phases: [{ detail: 'x' }] }"),
+    /must have a title string/,
+  );
+});
+
+test("parseWorkflowScript rejects meta.model with wrong type", () => {
+  assert.throws(
+    () => parseWorkflowScript("export const meta = { name: 'demo', description: 'desc', model: 123 }"),
+    /must be a string/,
+  );
+});
+
+test("parseWorkflowScript still parses a removed/unknown meta field (e.g. whenToUse)", () => {
+  // whenToUse is no longer an official field; a script that still sets it must keep
+  // parsing (it's just ignored), not throw.
+  const parsed = parseWorkflowScript(
+    "export const meta = { name: 'demo', description: 'desc', whenToUse: 'legacy' }\nreturn 1",
+  );
+  assert.equal(parsed.meta.name, "demo");
 });
 
 test("parseWorkflowScript rejects nondeterministic APIs", () => {
