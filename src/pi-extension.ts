@@ -1,7 +1,13 @@
 import { closeSync, existsSync, openSync, readSync } from "node:fs";
 import { resolve } from "node:path";
 import { StringDecoder } from "node:string_decoder";
-import { createCodingTools, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import {
+  createCodingTools,
+  type ExtensionAPI,
+  type ExtensionContext,
+  getMarkdownTheme,
+} from "@earendil-works/pi-coding-agent";
+import { type Component, Markdown, Text } from "@earendil-works/pi-tui";
 import { registerBuiltinWorkflows } from "./builtin-commands.js";
 import { createEffortState, type EffortState, registerEffortCommand } from "./effort-command.js";
 import {
@@ -37,6 +43,37 @@ import { registerWorkflowModelsCommand } from "./workflows-models-command.js";
  * pi's own ~1MiB session scan — we only need the header and keep the read small.
  */
 const SESSION_HEADER_SCAN_BYTES = 64 * 1024;
+const WORKFLOW_RESULT_MESSAGE_TYPE = "workflow-result";
+
+function workflowResultContent(message: { content?: unknown }): string {
+  if (typeof message.content === "string") return message.content;
+  if (!Array.isArray(message.content)) return "";
+  return message.content
+    .filter((part): part is { type: "text"; text: string } =>
+      Boolean(
+        part &&
+          typeof part === "object" &&
+          (part as { type?: unknown }).type === "text" &&
+          typeof (part as { text?: unknown }).text === "string",
+      ),
+    )
+    .map((part) => part.text)
+    .join("\n");
+}
+
+function renderWorkflowResultMessage(
+  message: { content?: unknown },
+  options: { expanded?: boolean },
+  theme: any,
+): Component {
+  const content = workflowResultContent(message);
+  if (!options.expanded) {
+    return new Text(theme.fg("customMessageText", "Workflow result (expand to view)"), 0, 0);
+  }
+  return new Markdown(content, 0, 0, getMarkdownTheme(), {
+    color: (text: string) => theme.fg("customMessageText", text),
+  });
+}
 
 /**
  * Read-only probe of a session JSONL file's project cwd from its header line.
@@ -104,6 +141,10 @@ function buildManagerOptions(cwd: string, storage: WorkflowStorage) {
 }
 
 export default function extension(pi: ExtensionAPI) {
+  pi.registerMessageRenderer?.(WORKFLOW_RESULT_MESSAGE_TYPE, (message, options, theme) =>
+    renderWorkflowResultMessage(message, options, theme),
+  );
+
   // Mutable host state. Tools/commands resolve through getters so a
   // session_start that discovers a cross-project cwd can replace the manager
   // without leaving closed-over references pointing at the source project.
