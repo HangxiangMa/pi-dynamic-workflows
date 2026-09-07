@@ -27,6 +27,33 @@ return { scan }
   assert.equal((result.result as { scan: string }).scan, "result:scan");
 });
 
+test("runWorkflow retries failed agents and reports attempts", async () => {
+  let calls = 0;
+  const retries: number[] = [];
+  const result = await runWorkflow(
+    `export const meta = { name: 'retry_demo', description: 'Retry one agent' }
+await agent('unstable', { label: 'unstable', retries: 1 })
+return { ok: true }
+`,
+    {
+      agent: {
+        async run() {
+          calls++;
+          if (calls === 1) throw new Error("temporary failure");
+          return "recovered";
+        },
+      },
+      onAgentRetry(event) {
+        retries.push(event.attempt);
+      },
+    },
+  );
+
+  assert.equal(calls, 2);
+  assert.deepEqual(retries, [1]);
+  assert.equal(result.agentCount, 1);
+});
+
 test("runWorkflow records loop-created phases without skipped conditional phases", async () => {
   const result = await runWorkflow(
     `export const meta = {

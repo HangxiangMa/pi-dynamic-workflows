@@ -24,8 +24,12 @@ export interface WorkflowSnapshot {
   runningCount: number;
   doneCount: number;
   errorCount: number;
+  startedAt?: number;
+  elapsedMs?: number;
   durationMs?: number;
   result?: unknown;
+  error?: string;
+  retryCount?: number;
 }
 
 export interface WorkflowDisplay {
@@ -46,6 +50,7 @@ export interface WorkflowDisplayOptions {
 export function createWorkflowSnapshot(meta: WorkflowMeta): WorkflowSnapshot {
   return {
     name: meta.name,
+    startedAt: Date.now(),
     description: meta.description,
     phases: [],
     logs: [],
@@ -129,13 +134,16 @@ export function renderWorkflowLines(snapshot: WorkflowSnapshot, options: Workflo
   const maxAgents = options.maxAgents ?? 8;
   const maxLogs = options.maxLogs ?? 2;
   const showResultPreviews = options.showResultPreviews ?? false;
-  const state =
-    snapshot.errorCount > 0
+  const state = snapshot.error
+    ? `, failed`
+    : snapshot.errorCount > 0
       ? `, ${snapshot.errorCount} errors`
       : snapshot.runningCount > 0
         ? `, ${snapshot.runningCount} running`
         : "";
-  const lines = [`◆ Workflow: ${snapshot.name} (${snapshot.doneCount}/${snapshot.agentCount} done${state})`];
+  const elapsed = snapshot.elapsedMs ?? snapshot.durationMs;
+  const timing = elapsed !== undefined ? ` · ${formatDuration(elapsed)}` : "";
+  const lines = [`◆ Workflow: ${snapshot.name} (${snapshot.doneCount}/${snapshot.agentCount} done${state}${timing})`];
 
   const agentPhaseNames = snapshot.agents
     .map((agent) => agent.phase)
@@ -180,6 +188,8 @@ export function renderWorkflowLines(snapshot: WorkflowSnapshot, options: Workflo
     }
   }
 
+  if (snapshot.error) lines.push(`  error: ${shorten(snapshot.error, 120)}`);
+
   const visibleLogs = snapshot.logs.slice(-maxLogs);
   if (visibleLogs.length) {
     if (lines.length > 1) lines.push("");
@@ -221,6 +231,15 @@ function statusIcon(status: WorkflowAgentStatus): string {
 
 function unique(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+function formatDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return "0ms";
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  const seconds = ms / 1000;
+  if (seconds < 60) return `${seconds.toFixed(1)}s`;
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}m ${Math.floor(seconds % 60)}s`;
 }
 
 function shorten(value: string, max: number): string {
