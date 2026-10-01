@@ -1169,12 +1169,65 @@ export function renderPanelDetailed(
  * every manager event. Informational only — the user opens the navigator with
  * /workflows. (`_pi` is kept for signature stability.)
  */
+type SharedTaskDockRun = {
+  id: string;
+  source: "workflow";
+  label: string;
+  state: "running" | "waiting";
+  startedAt: number;
+  detail?: string;
+  summary?: string;
+  tokens?: { input: number; output: number };
+  cost?: number;
+};
+
+type SharedTaskDockRegister = (provider: () => SharedTaskDockRun[]) => () => void;
+let unregisterSharedTaskDock: (() => void) | undefined;
+
+function registerSharedTaskDock(manager: WorkflowManager): boolean {
+  const register = (
+    globalThis as typeof globalThis & {
+      __piMineRegisterTaskDockProvider?: SharedTaskDockRegister;
+    }
+  ).__piMineRegisterTaskDockProvider;
+  if (!register) return false;
+  unregisterSharedTaskDock?.();
+  unregisterSharedTaskDock = register(() =>
+    manager
+      .listRuns()
+      .filter((run) => run.status === "running" || run.status === "paused")
+      .map((run): SharedTaskDockRun => {
+        const live = manager.getRun(run.runId);
+        const agents = live?.snapshot.agents ?? run.agents;
+        const done = agents.filter((agent) => agent.status === "done").length;
+        const phase = live?.snapshot.currentPhase;
+        const usage = live?.snapshot.tokenUsage ?? run.tokenUsage;
+        return {
+          id: `workflow:${run.runId}`,
+          source: "workflow",
+          label: `workflow ${run.workflowName}`,
+          state: run.status === "paused" ? "waiting" : "running",
+          startedAt: live?.startedAt.getTime() ?? (Date.parse(run.startedAt) || Date.now()),
+          detail: `${done}/${agents.length} agents`,
+          summary: phase,
+          tokens: usage ? { input: usage.input ?? 0, output: usage.output ?? 0 } : undefined,
+          cost: usage?.cost,
+        };
+      }),
+  );
+  return true;
+}
+
 export function installTaskPanel(
   _pi: ExtensionAPI,
   manager: WorkflowManager,
   ui: ExtensionUIContext,
   opts: TaskPanelOptions = {},
 ): void {
+  // Prefer the shared pi-mine task dock. The workflow manager remains the sole
+  // owner of lifecycle/persistence; this provider contributes read-only rows.
+  if (registerSharedTaskDock(manager)) return;
+
   // Live-read settings with a ~1s TTL: a render-path disk read every frame would
   // be wasteful, but re-reading at most once a second still makes
   // /workflows-progress take effect "immediately" (no restart).
