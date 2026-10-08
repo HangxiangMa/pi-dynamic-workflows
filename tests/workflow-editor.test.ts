@@ -408,7 +408,7 @@ describe("installWorkflowKeywordArming", () => {
     } as unknown as ExtensionAPI;
 
     const state = mod.installWorkflowKeywordArming(pi, undefined, store.options);
-    assert.equal(state.keywordTriggerEnabled, true, "keyword trigger should default on");
+    assert.equal(state.keywordTriggerEnabled, true, "explicitly configured keyword trigger should be on");
     assert.equal(state.keywordTriggerWord, "workflow", "keyword trigger word should default to workflow");
 
     const command = commands.get("workflows-trigger");
@@ -491,7 +491,7 @@ describe("installWorkflowKeywordArming", () => {
     assert.match(sent.at(-1)?.content ?? "", /workflow\/workflows/);
   });
 
-  it("keeps keyword triggering enabled when the setting is absent or loading fails", async () => {
+  it("keeps keyword triggering disabled when the setting is absent or loading fails", async () => {
     const mod = await load();
     const stores = [
       { load: () => ({}), save: () => {} },
@@ -504,18 +504,91 @@ describe("installWorkflowKeywordArming", () => {
     ];
 
     for (const settingsStore of stores) {
+      const captured: Array<{ event: string; handler: (...args: unknown[]) => unknown }> = [];
+      const commands = new Map<string, { handler: (args: string, ctx: unknown) => Promise<void> }>();
+      let setActiveToolsCalls = 0;
       const pi = {
-        on: () => {},
-        registerCommand: () => {},
-        getActiveTools: () => [],
-        setActiveTools: () => {},
+        on: (event: string, handler: (...args: unknown[]) => unknown) => {
+          captured.push({ event, handler });
+        },
+        registerCommand: (name: string, command: { handler: (args: string, ctx: unknown) => Promise<void> }) => {
+          commands.set(name, command);
+        },
+        sendMessage: () => {},
+        getActiveTools: () => ["bash"],
+        setActiveTools: () => {
+          setActiveToolsCalls++;
+        },
       } as unknown as ExtensionAPI;
 
       const state = mod.installWorkflowKeywordArming(pi, undefined, { settingsStore });
-
-      assert.equal(state.keywordTriggerEnabled, true);
+      assert.equal(state.keywordTriggerEnabled, false);
       assert.equal(state.keywordTriggerWord, "workflow");
+
+      const inputHandler = captured.find((h) => h.event === "input")?.handler;
+      assert.ok(inputHandler, "input handler should be registered");
+      assert.deepEqual(inputHandler({ source: "interactive", text: "Please run a workflow review." }), {
+        action: "continue",
+      });
+      assert.equal(setActiveToolsCalls, 0, "default-off input must not change active tools");
+
+      const command = commands.get("workflows-trigger");
+      assert.ok(command, "should register /workflows-trigger");
+      await command.handler("on", {});
+      assert.equal(state.keywordTriggerEnabled, true);
+
+      const result = inputHandler({ source: "interactive", text: "Please run a workflow review." });
+      assert.equal((result as { action?: string }).action, "transform");
+      assert.equal(setActiveToolsCalls, 1, "turning the trigger on should restore transformation");
     }
+  });
+
+  it("persists /workflows-trigger on for a new install", async () => {
+    const mod = await load();
+    let settings: { keywordTriggerEnabled?: boolean } = {};
+    const saved: Array<{ keywordTriggerEnabled?: boolean }> = [];
+    const settingsStore = {
+      load: () => ({ ...settings }),
+      save: (next: { keywordTriggerEnabled?: boolean }) => {
+        settings = { ...settings, ...next };
+        saved.push(next);
+      },
+    };
+
+    const install = () => {
+      const captured: Array<{ event: string; handler: (...args: unknown[]) => unknown }> = [];
+      const pi = {
+        on: (event: string, handler: (...args: unknown[]) => unknown) => {
+          captured.push({ event, handler });
+        },
+        registerCommand: () => {},
+        getActiveTools: () => ["bash"],
+        setActiveTools: () => {},
+      } as unknown as ExtensionAPI;
+      const state = mod.installWorkflowKeywordArming(pi, undefined, { settingsStore });
+      return { state, inputHandler: captured.find((h) => h.event === "input")?.handler };
+    };
+
+    const first = install();
+    assert.equal(first.state.keywordTriggerEnabled, false);
+    const commands = new Map<string, { handler: (args: string, ctx: unknown) => Promise<void> }>();
+    const commandPi = {
+      on: () => {},
+      registerCommand: (name: string, command: { handler: (args: string, ctx: unknown) => Promise<void> }) => {
+        commands.set(name, command);
+      },
+      sendMessage: () => {},
+    } as unknown as ExtensionAPI;
+    mod.installWorkflowKeywordArming(commandPi, undefined, { settingsStore });
+    await commands.get("workflows-trigger")?.handler("on", {});
+
+    assert.deepEqual(saved, [{ keywordTriggerEnabled: true }]);
+    const second = install();
+    assert.equal(second.state.keywordTriggerEnabled, true);
+    assert.equal(
+      (second.inputHandler?.({ source: "interactive", text: "run a workflow review" }) as { action?: string }).action,
+      "transform",
+    );
   });
 
   it("loads the persisted keyword trigger preference on install", async () => {

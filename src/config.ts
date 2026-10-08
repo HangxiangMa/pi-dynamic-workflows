@@ -32,7 +32,10 @@ export const MODEL_TIERS_FILE = ".pi/workflows/model-tiers.json";
 /** User-level workflow extension settings file, relative to the home directory. */
 export const WORKFLOW_SETTINGS_FILE = ".pi/workflows/settings.json";
 
-/** Default keyword that arms workflows mode from interactive input. */
+/** Whether mentioning the workflow keyword should arm workflows mode by default. */
+export const DEFAULT_KEYWORD_TRIGGER_ENABLED = false;
+
+/** Default keyword that arms workflows mode from interactive input when enabled. */
 export const DEFAULT_KEYWORD_TRIGGER_WORD = "workflow";
 
 /** Normalize a user-configured keyword trigger word. */

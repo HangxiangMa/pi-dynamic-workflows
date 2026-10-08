@@ -34,7 +34,7 @@ Run a workflow to audit every route under src/routes/ for missing auth checks.
 
 Pi writes and starts the workflow in the background. A live panel tracks progress while you keep working, and the final result is delivered back into the conversation automatically.
 
-Keyword triggering is on by default: use the bounded word **workflow** or **workflows** in a message to arm workflow mode — the assistant then handles a request by fanning it out across agents, but still answers plainly if you're only asking *about* workflows (the trigger authorizes the tool, it doesn't force it). Or run `/workflows run <prompt>` explicitly. Identifier-like text and paths such as `myworkflow`, `workflow_name`, and `src/workflow-editor.ts` do not trigger. You can change the keyword with `/workflows-trigger set pi-workflow` or disable it with `/workflows-trigger off`.
+Keyword triggering is off by default: workflow mode is opt-in through `/workflows run <prompt>` or a direct `workflow` tool call. If enabled with `/workflows-trigger on`, the bounded word **workflow** or **workflows** in a message arms workflow mode — the assistant then handles a request by fanning it out across agents, but still answers plainly if you're only asking *about* workflows (the trigger authorizes the tool, it doesn't force it). Identifier-like text and paths such as `myworkflow`, `workflow_name`, and `src/workflow-editor.ts` do not trigger. You can change the keyword with `/workflows-trigger set pi-workflow` or disable it with `/workflows-trigger off`.
 
 ## How it works
 
@@ -141,7 +141,7 @@ The installed extension generates this compact index from its executable capabil
 /code-review 42
 ```
 
-For an always-on exhaustive mode, use `/ultracode`; `/effort high` is the lighter standing option.
+For an always-on exhaustive mode, use `/ultracode`; `/effort high` is the lighter standing option. `/effort` is an independent standing orchestration mode and is not controlled by `/workflows-trigger off`.
 
 These same 5 patterns are also reachable by name without a slash command — Pi can recognize a decomposable request and run the matching curated pattern directly:
 
@@ -168,6 +168,8 @@ Pi can manage background runs directly with the `workflow_control` tool instead 
 | `/workflows-models` | Map model tiers and thinking levels |
 | `/ultracode [off]` | Toggle exhaustive automatic workflows |
 | `/effort off\|high\|ultra` | Set the standing orchestration effort |
+
+`/workflows-trigger off` only disables keyword-based input arming. It does not disable an explicitly selected `/effort high|ultra` mode; use `/effort off` to disable that independent standing mode.
 
 In the navigator: `↑/↓` select · `PgUp/PgDn` page · `Home/End` jump · `/` filter runs by name, ID, or status and saved workflows by name or description · `enter/→` open · `esc/←` back. Filter text updates the visible list immediately; `enter` commits the draft filter. In filter-edit mode, `esc` cancels the draft and keeps the committed query; in browse mode, `esc` first clears an existing filter without closing the navigator, and only a second `esc` with no filter backs/closes normally. On a run, `p` pauses (press `p` again to confirm), `x` stops (press `x` again to confirm), `r` restarts, and `s` saves; these lifecycle controls remain bound to the run while viewing its phases, agents, or detail. On a saved workflow (including its detail view), `r` renames and `x` deletes (press `x` again to confirm). Rename `enter` commits and `esc` cancels; names cannot contain whitespace, controls, or path separators. `q` quits.
 
@@ -267,11 +269,12 @@ Set a literal, case-insensitive custom trigger in `~/.pi/workflows/settings.json
 
 ```json
 {
+  "keywordTriggerEnabled": true,
   "keywordTriggerWord": "pi-workflow"
 }
 ```
 
-The default `workflow` also matches `workflows`; a custom word matches exactly. Trigger words are case-insensitive and Unicode identifier-bounded, and do not activate inside paths, slash commands, or identifier-like text. Detection is purely textual, applied at submit time to the message you send — it does not depend on, or own, Pi's editor component, so it works the same regardless of what else is installed.
+Keyword triggering defaults to off. The `keywordTriggerEnabled` setting above enables it for new sessions; you can also run `/workflows-trigger on`. The default `workflow` also matches `workflows`; a custom word matches exactly. Trigger words are case-insensitive and Unicode identifier-bounded, and do not activate inside paths, slash commands, or identifier-like text. Detection is purely textual, applied at submit time to the message you send — it does not depend on, or own, Pi's editor component, so it works the same regardless of what else is installed.
 
 </details>
 
@@ -303,7 +306,7 @@ Only a call that finishes with a real result is journaled — a call whose every
 
 3.0 is a milestone release. The one behavior change to know about:
 
-- **Keyword triggering now _authorizes_ the workflow tool instead of _forcing_ it.** In 2.x, typing the trigger word (default `workflow`) rewrote your message into a directive that forced a background workflow. In 3.0 it _arms_ the tool and the model decides: a real, decomposable request is fanned out across agents, but a message that only mentions workflows — a question, a filename, a passing reference — is answered normally. Nothing to configure. If you relied on the word always kicking off a run, use `/workflows run <prompt>` for the explicit path. Keyword triggering stays on by default; `/workflows-trigger off` disables it and `/workflows-trigger set <word>` changes the word.
+- **Keyword triggering now _authorizes_ the workflow tool instead of _forcing_ it.** In 2.x, typing the trigger word (default `workflow`) rewrote your message into a directive that forced a background workflow. In 3.0 it _arms_ the tool and the model decides: a real, decomposable request is fanned out across agents, but a message that only mentions workflows — a question, a filename, a passing reference — is answered normally. Automatic keyword arming is now off by default; enable it explicitly with `/workflows-trigger on`, or use `/workflows run <prompt>` for the explicit path.
 
 Everything else is additive or a fix: the `workflow_control` tool (list/status/pause/resume/stop), edited-script resume, auto-resume on provider usage limits, and persistence/perf hardening. Requires pi ≥ 0.80.8.
 

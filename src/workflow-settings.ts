@@ -12,7 +12,7 @@ import { workflowHomeDir, workflowProjectPaths } from "./workflow-paths.js";
 
 export interface WorkflowSettings {
   keywordTriggerEnabled?: boolean;
-  /** Literal keyword that arms workflows mode from interactive input. */
+  /** Literal keyword that arms workflows mode from interactive input when enabled. */
   keywordTriggerWord?: string;
   defaultAgentTimeoutMs?: number | null;
   /**

@@ -22,7 +22,7 @@ import { loadWorkflowSettings } from "./workflow-settings.js";
 
 /** The single always-on gate that authorizes workflow use without forcing it. */
 export const WORKFLOW_GATE_GUIDELINE =
-  "The `workflow` tool runs multi-agent orchestration — it fans decomposable work out across subagents, and fits tasks shaped like: repo-wide inspection, independent parallel research/checks, multi-perspective review, or fan-out/fan-in synthesis. ONLY call it when the user explicitly opts in — via the workflow trigger word, `/workflows run`, or their own words (e.g. 'run a workflow', 'fan this out', '并行审一遍'). For any other task — even one that would clearly benefit — do not call it; you may briefly offer it (with a rough cost) as an option instead.";
+  "The `workflow` tool orchestrates decomposable multi-agent work: repo inspection, parallel checks, multi-perspective review, or fan-out/fan-in. Call it when the current project/session policy authorizes autonomous selection (for example, an AGENT.md policy), or when the user explicitly opts in via the trigger word, `/workflows run`, or direct wording. Without such authorization, offer it with a rough cost instead. Even when authorized, handle simple or non-decomposable work directly.";
 
 const workflowToolSchema = Type.Object({
   script: Type.Optional(

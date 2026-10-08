@@ -90,8 +90,10 @@ test("createWorkflowTool keeps permanent guidance to the single upstream gate", 
   const guidance = createWorkflowTool().promptGuidelines;
 
   assert.deepEqual(guidance, [WORKFLOW_GATE_GUIDELINE]);
-  assert.match(guidance[0], /ONLY call it when the user explicitly opts in/i);
-  assert.match(guidance[0], /you may briefly offer it \(with a rough cost\)/i);
+  assert.match(guidance[0], /project\/session policy authorizes autonomous selection/i);
+  assert.match(guidance[0], /AGENT\.md policy/i);
+  assert.match(guidance[0], /user explicitly opts in/i);
+  assert.match(guidance[0], /offer it with a rough cost/i);
   assert.doesNotMatch(guidance[0], /export const meta|parallel\(\) requires functions/i);
 });
 

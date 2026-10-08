@@ -1,13 +1,17 @@
 /**
- * "Workflows mode" keyword trigger: while the submitted message contains the
- * bounded word `workflow`/`workflows` (or a configured custom trigger word),
- * the message is transformed at submit time to instruct Pi to actually run the
- * workflow tool. Detection is purely textual (`event.text` on the `input`
- * hook) — it does not depend on, or own, the host's editor component.
+ * "Workflows mode" keyword trigger: when enabled and the submitted message
+ * contains the bounded word `workflow`/`workflows` (or a configured custom
+ * trigger word), the message is transformed at submit time to instruct Pi to
+ * actually run the workflow tool. Detection is purely textual (`event.text` on
+ * the `input` hook) — it does not depend on, or own, the host's editor component.
  */
 
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { DEFAULT_KEYWORD_TRIGGER_WORD, normalizeKeywordTriggerWord } from "./config.js";
+import {
+  DEFAULT_KEYWORD_TRIGGER_ENABLED,
+  DEFAULT_KEYWORD_TRIGGER_WORD,
+  normalizeKeywordTriggerWord,
+} from "./config.js";
 import { type EffortState, effortDirective, isSubstantive } from "./effort-command.js";
 import {
   loadWorkflowSettings,
@@ -309,7 +313,7 @@ export function installWorkflowKeywordArming(
   const initialSettings = loadInitialWorkflowSettings(settingsStore);
   const state: WorkflowModeState = {
     active: false,
-    keywordTriggerEnabled: initialSettings.keywordTriggerEnabled ?? true,
+    keywordTriggerEnabled: initialSettings.keywordTriggerEnabled ?? DEFAULT_KEYWORD_TRIGGER_ENABLED,
     keywordTriggerWord: initialSettings.keywordTriggerWord ?? DEFAULT_KEYWORD_TRIGGER_WORD,
   };
 
@@ -396,7 +400,10 @@ function loadInitialWorkflowSettings(settingsStore: WorkflowSettingsStore): Work
       keywordTriggerWord: normalizeKeywordTriggerWord(settings.keywordTriggerWord) ?? DEFAULT_KEYWORD_TRIGGER_WORD,
     };
   } catch {
-    return { keywordTriggerEnabled: true, keywordTriggerWord: DEFAULT_KEYWORD_TRIGGER_WORD };
+    return {
+      keywordTriggerEnabled: DEFAULT_KEYWORD_TRIGGER_ENABLED,
+      keywordTriggerWord: DEFAULT_KEYWORD_TRIGGER_WORD,
+    };
   }
 }
 
